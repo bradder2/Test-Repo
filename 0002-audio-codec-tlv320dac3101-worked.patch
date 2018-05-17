@@ -1,0 +1,1214 @@
+From 4832e048a1d57ffa27170e45f9e4adb842eac9e7 Mon Sep 17 00:00:00 2001
+From: Hao <harriszhang6@gmail.com>
+Date: Fri, 1 Dec 2017 23:15:33 +0800
+Subject: [PATCH 2/3] audio codec:tlv320dac3101 worked
+
+---
+ Documentation/spi/spidev_test.c        |   2 +-
+ arch/arm/boot/dts/imx6q-sabresd.dts    |   2 +
+ arch/arm/boot/dts/imx6qdl-sabresd.dtsi | 138 ++++++++++----
+ arch/arm/mach-imx/clk-imx6q.c          |   9 +
+ arch/arm/mach-imx/mach-imx6q.c         |   4 +-
+ drivers/base/regmap/regmap.c           |   2 +
+ drivers/clk/clk.c                      |   1 +
+ drivers/mmc/host/sdhci-esdhc-imx.c     |  11 ++
+ sound/soc/codecs/Kconfig               |  12 +-
+ sound/soc/codecs/Makefile              |   3 +-
+ sound/soc/codecs/tlv320aic31xx.c       | 326 ++++++++++++++++++++++++---------
+ sound/soc/codecs/tlv320aic31xx.h       |   2 +-
+ sound/soc/fsl/Kconfig                  |  12 ++
+ sound/soc/fsl/Makefile                 |   2 +
+ sound/soc/soc-core.c                   |   1 +
+ sound/soc/soc-dapm.c                   |   1 +
+ 16 files changed, 394 insertions(+), 134 deletions(-)
+
+diff --git a/Documentation/spi/spidev_test.c b/Documentation/spi/spidev_test.c
+index 16feda9..7adb3f3 100644
+--- a/Documentation/spi/spidev_test.c
++++ b/Documentation/spi/spidev_test.c
+@@ -29,7 +29,7 @@ static void pabort(const char *s)
+ 	abort();
+ }
+ 
+-static const char *device = "/dev/spidev1.1";
++static const char *device = "/dev/spidev1.0";
+ static uint8_t mode;
+ static uint8_t bits = 8;
+ static uint32_t speed = 500000;
+diff --git a/arch/arm/boot/dts/imx6q-sabresd.dts b/arch/arm/boot/dts/imx6q-sabresd.dts
+index 7338e9c..3dfcebe 100644
+--- a/arch/arm/boot/dts/imx6q-sabresd.dts
++++ b/arch/arm/boot/dts/imx6q-sabresd.dts
+@@ -52,6 +52,7 @@
+ 	status = "okay";
+ };
+ 
++/*
+ &i2c1 {
+ 	status = "disabled";
+ };
+@@ -59,6 +60,7 @@
+ &i2c3 {
+ 	status = "disabled";
+ };
++*/
+ 
+ &dsa {
+ 	compatible = "marvell,dsa";
+diff --git a/arch/arm/boot/dts/imx6qdl-sabresd.dtsi b/arch/arm/boot/dts/imx6qdl-sabresd.dtsi
+index 75f7274..da98803 100644
+--- a/arch/arm/boot/dts/imx6qdl-sabresd.dtsi
++++ b/arch/arm/boot/dts/imx6qdl-sabresd.dtsi
+@@ -74,6 +74,7 @@
+ 			enable-active-high;
+ 		};
+ 
++/*
+ 		reg_audio: regulator@2 {
+ 			compatible = "regulator-fixed";
+ 			reg = <2>;
+@@ -81,6 +82,7 @@
+ 			gpio = <&gpio4 10 0>;
+ 			enable-active-high;
+ 		};
++*/
+ 
+ 		reg_mipi_dsi_pwr_on: mipi_dsi_pwr_on {
+ 			compatible = "regulator-fixed";
+@@ -89,6 +91,7 @@
+ 			enable-active-high;
+ 		};
+ 
++/*
+ 		reg_sensor: regulator@3 {
+ 			compatible = "regulator-fixed";
+ 			reg = <3>;
+@@ -99,6 +102,7 @@
+ 			startup-delay-us = <500>;
+ 			enable-active-high;
+ 		};
++*/
+ 	};
+ 
+ 	gpio-keys {
+@@ -128,12 +132,14 @@
+ 		};
+ 	};
+ 
++/*
+ 	sound {
+ 		compatible = "fsl,imx6q-sabresd-wm8962",
+ 			   "fsl,imx-audio-wm8962";
+ 		model = "wm8962-audio";
+ 		cpu-dai = <&ssi2>;
+ 		audio-codec = <&codec>;
++		gpio-reset = <&gpio>;
+ 		audio-routing =
+ 			"Headphone Jack", "HPOUTL",
+ 			"Headphone Jack", "HPOUTR",
+@@ -148,6 +154,47 @@
+ 		hp-det-gpios = <&gpio7 8 1>;
+ 		mic-det-gpios = <&gpio1 9 1>;
+ 	};
++*/
++
++/*
++	tlv320dac3x_reset: gpio-reset {
++		compatible = "gpio-reset";
++		reset-gpios = <&gpio5 9 GPIO_ACTIVE_HIGH>;
++		reset-delay-us = <10000>;
++		initially-in-reset;
++	};
++*/
++
++/*
++    sound {
++            compatible = "fsl,imx6q-sabresd-sgtl5000",
++                         "fsl,imx-audio-sgtl5000";
++            model = "imx6q-sabresd-sgtl5000";
++            cpu-dai = <&ssi2>;
++            audio-codec = <&codec>;
++			rst-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
++            audio-routing =
++                    "MIC_IN", "Mic Jack",
++                    "Mic Jack", "Mic Bias",
++                    "Headphone Jack", "HP_OUT";
++            mux-int-port = <2>;
++            mux-ext-port = <3>;
++    };
++*/
++
++	sound {
++		compatible = "fsl,imx-audio-tlv320dac3100";
++		model = "imx-audio-tlv320dac3100";
++		cpu-dai = <&ssi2>;
++		audio-codec = <&codec>;
++		audio-routing =
++			"Ext Spk", "SPL",
++			"Ext Spk", "SPR",
++			"AIN1",	   "Mic Jack", 
++			"AIN2",	   "Mic Jack"; 
++		mux-int-port = <2>;
++		mux-ext-port = <3>;
++	};
+ 
+ 	sound-hdmi {
+ 		compatible = "fsl,imx6q-audio-hdmi",
+@@ -277,6 +324,12 @@
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_ecspi2>;
+ 	status = "okay";
++	
++	spidev0: spi@0 {
++		compatible = "spidev";
++		reg = <0>;
++		spi-max-frequency = <57600000>;
++	};
+ };
+ 
+ &fec {
+@@ -329,35 +382,42 @@
+ 	};
+ };
+ 
++&clks {
++    assigned-clocks = <&clks IMX6QDL_PLL4_BYPASS_SRC>,
++                      <&clks IMX6QDL_PLL4_BYPASS>,
++                      <&clks IMX6QDL_CLK_PLL4_POST_DIV>;
++    assigned-clock-parents = <&clks IMX6QDL_CLK_OSC>,
++                            <&clks IMX6QDL_PLL4_BYPASS_SRC>;
++    assigned-clock-rates = <0>, <0>, <36000000>;
++};
++
+ &i2c1 {
+ 	clock-frequency = <100000>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_i2c1>;
+ 	status = "okay";
++	
++	codec: tlv320dac3100@18 {
++                compatible = "ti,tlv320dac3101";
++                reg = <0x18>;
+ 
+-	codec: wm8962@1a {
+-		compatible = "wlf,wm8962";
+-		reg = <0x1a>;
+-		clocks = <&clks 201>;
+-		DCVDD-supply = <&reg_audio>;
+-		DBVDD-supply = <&reg_audio>;
+-		AVDD-supply = <&reg_audio>;
+-		CPVDD-supply = <&reg_audio>;
+-		MICVDD-supply = <&reg_audio>;
+-		PLLVDD-supply = <&reg_audio>;
+-		SPKVDD1-supply = <&reg_audio>;
+-		SPKVDD2-supply = <&reg_audio>;
+-		amic-mono;
+-		gpio-cfg = <
+-			0x0000 /* 0:Default */
+-			0x0000 /* 1:Default */
+-			0x0013 /* 2:FN_DMICCLK */
+-			0x0000 /* 3:Default */
+-			0x8014 /* 4:FN_DMICCDAT */
+-			0x0000 /* 5:Default */
+-		>;
+-       };
++                clocks = <&clks IMX6QDL_CLK_PLL4_AUDIO>, <&clks IMX6QDL_CLK_CKO>, <&clks IMX6QDL_CLK_CKO1>;
++                clock-names ="pll4", "cko", "cko1";
++                gpio-reset = <&gpio5 9 GPIO_ACTIVE_LOW>;
++    };
+ 
++/*
++	codec: tlv320dac3100@30 {
++                compatible = "ti,tlv320dac3101";
++                reg = <0x30>;
++                clocks = <&clks IMX6QDL_CLK_PLL4_AUDIO>, <&clks IMX6QDL_CLK_CKO>, <&clks IMX6QDL_CLK_CKO1>;
++                clock-names ="pll4", "cko", "cko1";
++                gpio-reset = <&gpio5 9 GPIO_ACTIVE_LOW>;
++    };
++ */
++    
++
++/*
+ 	mma8451@1c {
+ 		compatible = "fsl,mma8451";
+ 		reg = <0x1c>;
+@@ -376,16 +436,16 @@
+ 		pinctrl-0 = <&pinctrl_ipu1_2>;
+ 		clocks = <&clks IMX6QDL_CLK_CKO>;
+ 		clock-names = "csi_mclk";
+-		DOVDD-supply = <&vgen4_reg>; /* 1.8v */
+-		AVDD-supply = <&vgen3_reg>;  /* 2.8v, on rev C board is VGEN3,
+-						on rev B board is VGEN5 */
+-		DVDD-supply = <&vgen2_reg>;  /* 1.5v*/
+-		pwn-gpios = <&gpio1 16 1>;   /* active low: SD1_DAT0 */
+-		rst-gpios = <&gpio1 17 0>;   /* active high: SD1_DAT1 */
++		DOVDD-supply = <&vgen4_reg>; 
++		AVDD-supply = <&vgen3_reg>;
++		DVDD-supply = <&vgen2_reg>;
++		pwn-gpios = <&gpio1 16 1>;
++		rst-gpios = <&gpio1 17 0>;  
+ 		csi_id = <0>;
+ 		mclk = <24000000>;
+ 		mclk_source = <0>;
+ 	};
++*/
+ };
+ 
+ &i2c2 {
+@@ -539,13 +599,13 @@
+ 
+ };
+ 
+-/*
+ &i2c3 {
+ 	clock-frequency = <100000>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_i2c3>;
+ 	status = "okay";
+ 
++/*
+ 	egalax_ts@04 {
+ 		compatible = "eeti,egalax_ts";
+ 		reg = <0x04>;
+@@ -572,8 +632,8 @@
+ 		interrupt-parent = <&gpio3>;
+ 		interrupts = <9 2>;
+ 	};
+-};
+ */
++};
+ 
+ &iomuxc {
+ 	pinctrl-names = "default";
+@@ -592,6 +652,8 @@
+ 				MX6QDL_PAD_ENET_TXD1__GPIO1_IO29 0x80000000
+ 				MX6QDL_PAD_EIM_D22__GPIO3_IO22  0x80000000
+ 				MX6QDL_PAD_ENET_CRS_DV__GPIO1_IO25 0x80000000
++
++				MX6QDL_PAD_DISP0_DAT15__GPIO5_IO09	0x80000000
+ 				/*MX6QDL_PAD_EIM_D26__GPIO3_IO26 0x80000000*/
+ 				/**/
+ 				/* powerline with gpio*/
+@@ -604,7 +666,7 @@
+ 				MX6QDL_PAD_GPIO_9__GPIO1_IO09	0x80000000
+ 				/* end */
+ 				/**/
+-				MX6QDL_PAD_EIM_CS1__GPIO2_IO24 0x80000000
++				/* MX6QDL_PAD_EIM_CS1__GPIO2_IO24 0x80000000 */
+ 				MX6QDL_PAD_ENET_RXD0__GPIO1_IO27 0x80000000
+ 				MX6QDL_PAD_EIM_A25__GPIO5_IO02 0x80000000
+ 				MX6QDL_PAD_EIM_D23__GPIO3_IO23 0x80000000
+@@ -697,17 +759,19 @@
+ 			>;
+ 		};
+ 
++/*
+ 		pinctrl_enet_irq: enetirqgrp {
+ 			fsl,pins = <
+ 				MX6QDL_PAD_GPIO_6__ENET_IRQ		0x000b1
+ 			>;
+ 		};
++*/
+ 
+ 		pinctrl_gpio_keys: gpio_keysgrp {
+ 			fsl,pins = <
+ 				MX6QDL_PAD_EIM_D29__GPIO3_IO29 0x80000000
+ 				MX6QDL_PAD_GPIO_4__GPIO1_IO04  0x80000000
+-				MX6QDL_PAD_GPIO_5__GPIO1_IO05  0x80000000
++				/* MX6QDL_PAD_GPIO_5__GPIO1_IO05  0x80000000 */
+ 			>;
+ 		};
+ 
+@@ -750,6 +814,12 @@
+ 			>;
+ 		};
+ */
++		pinctrl_i2c3: i2c3grp {
++			fsl,pins = <
++				MX6QDL_PAD_GPIO_5__I2C3_SCL  	0x4001b8b1
++				MX6QDL_PAD_GPIO_6__I2C3_SDA		0x4001b8b1
++			>;
++		};
+ 
+ 		pinctrl_ipu1: ipu1grp {
+ 			fsl,pins = <
+@@ -773,10 +843,10 @@
+ 				MX6QDL_PAD_DISP0_DAT12__IPU1_DISP0_DATA12  0x10
+ 				MX6QDL_PAD_DISP0_DAT13__IPU1_DISP0_DATA13  0x10
+ 				MX6QDL_PAD_DISP0_DAT14__IPU1_DISP0_DATA14  0x10
+-				MX6QDL_PAD_DISP0_DAT15__IPU1_DISP0_DATA15  0x10
++				/* MX6QDL_PAD_DISP0_DAT15__IPU1_DISP0_DATA15  0x10 */
+ 				MX6QDL_PAD_DISP0_DAT16__IPU1_DISP0_DATA16  0x10
+ 				MX6QDL_PAD_DISP0_DAT17__IPU1_DISP0_DATA17  0x10
+-				MX6QDL_PAD_DISP0_DAT18__IPU1_DISP0_DATA18  0x10
++				/* MX6QDL_PAD_DISP0_DAT18__IPU1_DISP0_DATA18  0x10 */
+ 				MX6QDL_PAD_DISP0_DAT19__IPU1_DISP0_DATA19  0x10
+ 				MX6QDL_PAD_DISP0_DAT20__IPU1_DISP0_DATA20  0x10
+ 				MX6QDL_PAD_DISP0_DAT21__IPU1_DISP0_DATA21  0x10
+diff --git a/arch/arm/mach-imx/clk-imx6q.c b/arch/arm/mach-imx/clk-imx6q.c
+index f0d8000..c82cc7a 100644
+--- a/arch/arm/mach-imx/clk-imx6q.c
++++ b/arch/arm/mach-imx/clk-imx6q.c
+@@ -546,8 +546,17 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
+ 	 * Let's initially set up CLKO with OSC24M, since this configuration
+ 	 * is widely used by imx6q board designs to clock audio codec.
+ 	 */
++#if 0
+ 	imx_clk_set_parent(clk[IMX6QDL_CLK_CKO2_SEL], clk[IMX6QDL_CLK_OSC]);
+ 	imx_clk_set_parent(clk[IMX6QDL_CLK_CKO], clk[IMX6QDL_CLK_CKO2]);
++#else
++	//harris
++	//imx_clk_set_parent(clk[IMX6QDL_CLK_CKO1_SEL], clk[IMX6QDL_CLK_CKIL]);
++	imx_clk_set_parent(clk[IMX6QDL_PLL4_BYPASS_SRC], clk[IMX6QDL_CLK_OSC]);
++	imx_clk_set_parent(clk[IMX6QDL_CLK_CKO1_SEL], clk[IMX6QDL_CLK_PLL4_AUDIO_DIV]);
++	imx_clk_set_parent(clk[IMX6QDL_CLK_CKO], clk[IMX6QDL_CLK_CKO1]);
++	//imx_clk_set_rate(clk[IMX6QDL_CLK_CKO1_PODF], 12000000);
++#endif
+ 
+ 	/* Audio-related clocks configuration */
+ 	imx_clk_set_parent(clk[IMX6QDL_CLK_SPDIF_SEL], clk[IMX6QDL_CLK_PLL3_PFD3_454M]);
+diff --git a/arch/arm/mach-imx/mach-imx6q.c b/arch/arm/mach-imx/mach-imx6q.c
+index 3a67f17..8600643 100644
+--- a/arch/arm/mach-imx/mach-imx6q.c
++++ b/arch/arm/mach-imx/mach-imx6q.c
+@@ -279,12 +279,14 @@ static int ar8035_phy_fixup(struct phy_device *dev)
+ }
+ 
+ #define PHY_ID_AR8035 0x004dd072
++#if 0
+ static struct fixed_phy_status phy_stat __initdata             =
+ {
+ 	.link	= 1,
+ 	.speed	= 1000,
+ 	.duplex	= 1,
+ };
++#endif
+ 
+ static void __init imx6q_enet_phy_init(void)
+ {
+@@ -331,7 +333,7 @@ static void __init imx6q_1588_init(void)
+ 	 * set bit IOMUXC_GPR1[21].  Or the PTP clock must be from pad
+ 	 * (external OSC), and we need to clear the bit.
+ 	 */
+-#if 0
++#if 1
+ 	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6q-iomuxc-gpr");
+ 	if (!IS_ERR(gpr))
+ 		regmap_update_bits(gpr, IOMUXC_GPR1,
+diff --git a/drivers/base/regmap/regmap.c b/drivers/base/regmap/regmap.c
+index 2f9a3d8..d827ea8 100644
+--- a/drivers/base/regmap/regmap.c
++++ b/drivers/base/regmap/regmap.c
+@@ -1963,6 +1963,7 @@ static int _regmap_update_bits(struct regmap *map, unsigned int reg,
+ 	unsigned int tmp, orig;
+ 
+ 	ret = _regmap_read(map, reg, &orig);
++	//printk(KERN_INFO "regmap val:0x%x, return:%d\n", orig, ret);
+ 	if (ret != 0)
+ 		return ret;
+ 
+@@ -1971,6 +1972,7 @@ static int _regmap_update_bits(struct regmap *map, unsigned int reg,
+ 
+ 	if (tmp != orig) {
+ 		ret = _regmap_write(map, reg, tmp);
++	//printk(KERN_INFO "regmap write reg:0x%x, value:0x%x, return: %d\n", reg, tmp, ret);
+ 		*change = true;
+ 	} else {
+ 		*change = false;
+diff --git a/drivers/clk/clk.c b/drivers/clk/clk.c
+index 6908d3d..9476f66 100644
+--- a/drivers/clk/clk.c
++++ b/drivers/clk/clk.c
+@@ -543,6 +543,7 @@ static int clk_disable_unused(void)
+ 		pr_warn("clk: Not disabling unused clocks\n");
+ 		return 0;
+ 	}
++//while(1);
+ 
+ 	clk_prepare_lock();
+ 
+diff --git a/drivers/mmc/host/sdhci-esdhc-imx.c b/drivers/mmc/host/sdhci-esdhc-imx.c
+index 0ceaedd..91e7142 100644
+--- a/drivers/mmc/host/sdhci-esdhc-imx.c
++++ b/drivers/mmc/host/sdhci-esdhc-imx.c
+@@ -612,7 +612,12 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
+ 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
+ 	unsigned int host_clock = pltfm_host->clock;
+ 	int pre_div = 2;
++#if 0
+ 	int div = 1;
++#else
++//because hardware problem
++	int div = 5;
++#endif
+ 	u32 temp, val;
+ 
+ 	if (clock == 0) {
+@@ -639,8 +644,14 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
+ 		div++;
+ 
+ 	host->mmc->actual_clock = host_clock / pre_div / div;
++#if 0
+ 	dev_dbg(mmc_dev(host->mmc), "desired SD clock: %d, actual: %d\n",
+ 		clock, host->mmc->actual_clock);
++#else
++	//printk(KERN_INFO "host clock: %d, pre div: %d, div: %d\n", host_clock, pre_div, div);
++	//printk(KERN_INFO "desired SD clock: %d, actual: %d\n",
++	//	clock, host->mmc->actual_clock);
++#endif
+ 
+ 	if (imx_data->is_ddr)
+ 		pre_div >>= 2;
+diff --git a/sound/soc/codecs/Kconfig b/sound/soc/codecs/Kconfig
+index 45d8479..6bd6496 100644
+--- a/sound/soc/codecs/Kconfig
++++ b/sound/soc/codecs/Kconfig
+@@ -74,7 +74,8 @@ config SND_SOC_ALL_CODECS
+ 	select SND_SOC_TAS5086 if I2C
+ 	select SND_SOC_TLV320AIC23 if I2C
+ 	select SND_SOC_TLV320AIC26 if SPI_MASTER
+-#	select SND_SOC_TLV320AIC31XX if I2C
++##harris
++	select SND_SOC_TLV320AIC31XX if I2C
+ 	select SND_SOC_TLV320AIC32X4 if I2C
+ 	select SND_SOC_TLV320AIC3X if I2C
+ 	select SND_SOC_TPA6130A2 if I2C
+@@ -375,10 +376,11 @@ config SND_SOC_TLV320AIC26
+ 	tristate
+ 	depends on SPI
+ 
+-#config SND_SOC_TLV320AIC31XX
+-#	tristate "Texas Instruments TLV320AIC31xx CODECs"
+-#	depends on I2C
+-#	select REGMAP_I2C
++##harris
++config SND_SOC_TLV320AIC31XX
++	tristate "Texas Instruments TLV320AIC31xx CODECs"
++	depends on I2C
++	select REGMAP_I2C
+ 
+ config SND_SOC_TLV320AIC32X4
+ 	tristate
+diff --git a/sound/soc/codecs/Makefile b/sound/soc/codecs/Makefile
+index 75e4b3e..00f3a0c 100644
+--- a/sound/soc/codecs/Makefile
++++ b/sound/soc/codecs/Makefile
+@@ -202,7 +202,8 @@ obj-$(CONFIG_SND_SOC_TAS5086)	+= snd-soc-tas5086.o
+ obj-$(CONFIG_SND_SOC_TLV320AIC23)	+= snd-soc-tlv320aic23.o
+ obj-$(CONFIG_SND_SOC_TLV320AIC26)	+= snd-soc-tlv320aic26.o
+ obj-$(CONFIG_SND_SOC_TLV320AIC3X)	+= snd-soc-tlv320aic3x.o
+-#obj-$(CONFIG_SND_SOC_TLV320AIC31XX)     += snd-soc-tlv320aic31xx.o
++##harris
++obj-$(CONFIG_SND_SOC_TLV320AIC31XX)     += snd-soc-tlv320aic31xx.o
+ obj-$(CONFIG_SND_SOC_TLV320AIC32X4)     += snd-soc-tlv320aic32x4.o
+ obj-$(CONFIG_SND_SOC_TLV320DAC33)	+= snd-soc-tlv320dac33.o
+ obj-$(CONFIG_SND_SOC_TWL4030)	+= snd-soc-twl4030.o
+diff --git a/sound/soc/codecs/tlv320aic31xx.c b/sound/soc/codecs/tlv320aic31xx.c
+index 76c03f9..79c0d7d 100755
+--- a/sound/soc/codecs/tlv320aic31xx.c
++++ b/sound/soc/codecs/tlv320aic31xx.c
+@@ -41,6 +41,10 @@
+ #include <dt-bindings/sound/tlv320aic31xx-micbias.h>
+ 
+ #include "tlv320aic31xx.h"
++#define DEBUG
++
++static int aic31xx_set_bias_level(struct snd_soc_codec *codec,
++				  enum snd_soc_bias_level level);
+ 
+ static const struct reg_default aic31xx_reg_defaults[] = {
+ 	{ AIC31XX_CLKMUX, 0x00 },
+@@ -52,9 +56,9 @@ static const struct reg_default aic31xx_reg_defaults[] = {
+ 	{ AIC31XX_MDAC, 0x01 },
+ 	{ AIC31XX_DOSRMSB, 0x00 },
+ 	{ AIC31XX_DOSRLSB, 0x80 },
+-	{ AIC31XX_NADC, 0x01 },
+-	{ AIC31XX_MADC, 0x01 },
+-	{ AIC31XX_AOSR, 0x80 },
++//	{ AIC31XX_NADC, 0x01 },
++//	{ AIC31XX_MADC, 0x01 },
++//	{ AIC31XX_AOSR, 0x80 },
+ 	{ AIC31XX_IFACE1, 0x00 },
+ 	{ AIC31XX_DATA_OFFSET, 0x00 },
+ 	{ AIC31XX_IFACE2, 0x00 },
+@@ -63,9 +67,9 @@ static const struct reg_default aic31xx_reg_defaults[] = {
+ 	{ AIC31XX_DACMUTE, 0x0c },
+ 	{ AIC31XX_LDACVOL, 0x00 },
+ 	{ AIC31XX_RDACVOL, 0x00 },
+-	{ AIC31XX_ADCSETUP, 0x00 },
+-	{ AIC31XX_ADCFGA, 0x80 },
+-	{ AIC31XX_ADCVOL, 0x00 },
++//	{ AIC31XX_ADCSETUP, 0x00 },
++//	{ AIC31XX_ADCFGA, 0x80 },
++//	{ AIC31XX_ADCVOL, 0x00 },
+ 	{ AIC31XX_HPDRIVER, 0x04 },
+ 	{ AIC31XX_SPKAMP, 0x06 },
+ 	{ AIC31XX_DACMIXERROUTE, 0x00 },
+@@ -78,9 +82,9 @@ static const struct reg_default aic31xx_reg_defaults[] = {
+ 	{ AIC31XX_SPLGAIN, 0x00 },
+ 	{ AIC31XX_SPRGAIN, 0x00 },
+ 	{ AIC31XX_MICBIAS, 0x00 },
+-	{ AIC31XX_MICPGA, 0x80 },
+-	{ AIC31XX_MICPGAPI, 0x00 },
+-	{ AIC31XX_MICPGAMI, 0x00 },
++//	{ AIC31XX_MICPGA, 0x80 },
++//	{ AIC31XX_MICPGAPI, 0x00 },
++//	{ AIC31XX_MICPGAMI, 0x00 },
+ };
+ 
+ static bool aic31xx_volatile(struct device *dev, unsigned int reg)
+@@ -89,7 +93,7 @@ static bool aic31xx_volatile(struct device *dev, unsigned int reg)
+ 	case AIC31XX_PAGECTL: /* regmap implementation requires this */
+ 	case AIC31XX_RESET: /* always clears after write */
+ 	case AIC31XX_OT_FLAG:
+-	case AIC31XX_ADCFLAG:
++//	case AIC31XX_ADCFLAG:
+ 	case AIC31XX_DACFLAG1:
+ 	case AIC31XX_DACFLAG2:
+ 	case AIC31XX_OFFLAG: /* Sticky interrupt flags */
+@@ -97,6 +101,8 @@ static bool aic31xx_volatile(struct device *dev, unsigned int reg)
+ 	case AIC31XX_INTRADCFLAG: /* Sticky interrupt flags */
+ 	case AIC31XX_INTRDACFLAG2:
+ 	case AIC31XX_INTRADCFLAG2:
++	//harris
++	//case AIC31XX_IFACE1:
+ 		return true;
+ 	}
+ 	return false;
+@@ -106,7 +112,7 @@ static bool aic31xx_writeable(struct device *dev, unsigned int reg)
+ {
+ 	switch (reg) {
+ 	case AIC31XX_OT_FLAG:
+-	case AIC31XX_ADCFLAG:
++//	case AIC31XX_ADCFLAG:
+ 	case AIC31XX_DACFLAG1:
+ 	case AIC31XX_DACFLAG2:
+ 	case AIC31XX_OFFLAG: /* Sticky interrupt flags */
+@@ -250,16 +256,19 @@ static const char * const mic_select_text[] = {
+ 	"Off", "FFR 10 Ohm", "FFR 20 Ohm", "FFR 40 Ohm"
+ };
+ 
++#if 0
+ static SOC_ENUM_SINGLE_DECL(mic1lp_p_enum, AIC31XX_MICPGAPI, 6,
+ 	mic_select_text);
+ static SOC_ENUM_SINGLE_DECL(mic1rp_p_enum, AIC31XX_MICPGAPI, 4,
+ 	mic_select_text);
+ static SOC_ENUM_SINGLE_DECL(mic1lm_p_enum, AIC31XX_MICPGAPI, 2,
+ 	mic_select_text);
++#endif
+ 
+-static SOC_ENUM_SINGLE_DECL(cm_m_enum, AIC31XX_MICPGAMI, 6, mic_select_text);
+-static SOC_ENUM_SINGLE_DECL(mic1lm_m_enum, AIC31XX_MICPGAMI, 4,
+-	mic_select_text);
++
++//static SOC_ENUM_SINGLE_DECL(cm_m_enum, AIC31XX_MICPGAMI, 6, mic_select_text);
++//static SOC_ENUM_SINGLE_DECL(mic1lm_m_enum, AIC31XX_MICPGAMI, 4,
++//	mic_select_text);
+ 
+ static const DECLARE_TLV_DB_SCALE(dac_vol_tlv, -6350, 50, 0);
+ static const DECLARE_TLV_DB_SCALE(adc_fgain_tlv, 0, 10, 0);
+@@ -290,12 +299,12 @@ static const struct snd_kcontrol_new aic31xx_snd_controls[] = {
+ 	SOC_SINGLE_TLV("ADC Fine Capture Volume", AIC31XX_ADCFGA, 4, 4, 1,
+ 		       adc_fgain_tlv),
+ 
+-	SOC_SINGLE("ADC Capture Switch", AIC31XX_ADCFGA, 7, 1, 1),
+-	SOC_DOUBLE_R_S_TLV("ADC Capture Volume", AIC31XX_ADCVOL, AIC31XX_ADCVOL,
+-			   0, -24, 40, 6, 0, adc_cgain_tlv),
++//	SOC_SINGLE("ADC Capture Switch", AIC31XX_ADCFGA, 7, 1, 1),
++//	SOC_DOUBLE_R_S_TLV("ADC Capture Volume", AIC31XX_ADCVOL, AIC31XX_ADCVOL,
++//			   0, -24, 40, 6, 0, adc_cgain_tlv),
+ 
+-	SOC_SINGLE_TLV("Mic PGA Capture Volume", AIC31XX_MICPGA, 0,
+-		       119, 0, mic_pga_tlv),
++//	SOC_SINGLE_TLV("Mic PGA Capture Volume", AIC31XX_MICPGA, 0,
++//		       119, 0, mic_pga_tlv),
+ };
+ 
+ static const struct snd_kcontrol_new aic311x_snd_controls[] = {
+@@ -352,7 +361,6 @@ static int aic31xx_wait_bits(struct aic31xx_priv *aic31xx, unsigned int reg,
+ static int aic31xx_dapm_power_event(struct snd_soc_dapm_widget *w,
+ 				    struct snd_kcontrol *kcontrol, int event)
+ {
+-	//struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+ 	struct snd_soc_codec *codec = w->codec;
+ 	struct aic31xx_priv *aic31xx = snd_soc_codec_get_drvdata(codec);
+ 	unsigned int reg = AIC31XX_DACFLAG1;
+@@ -377,10 +385,10 @@ static int aic31xx_dapm_power_event(struct snd_soc_dapm_widget *w,
+ 	case WIDGET_BIT(AIC31XX_SPKAMP, 6):
+ 		mask = AIC31XX_SPRDRVPWRSTATUS_MASK;
+ 		break;
+-	case WIDGET_BIT(AIC31XX_ADCSETUP, 7):
+-		mask = AIC31XX_ADCPWRSTATUS_MASK;
+-		reg = AIC31XX_ADCFLAG;
+-		break;
++//	case WIDGET_BIT(AIC31XX_ADCSETUP, 7):
++//		mask = AIC31XX_ADCPWRSTATUS_MASK;
++//		reg = AIC31XX_ADCFLAG;
++//		break;
+ 	default:
+ 		dev_err(codec->dev, "Unknown widget '%s' calling %s\n",
+ 			w->name, __func__);
+@@ -422,17 +430,17 @@ static const struct snd_kcontrol_new dac31xx_right_output_switches[] = {
+ 	SOC_DAPM_SINGLE("From AIN2", AIC31XX_DACMIXERROUTE, 1, 1, 0),
+ };
+ 
+-static const struct snd_kcontrol_new p_term_mic1lp =
+-	SOC_DAPM_ENUM("MIC1LP P-Terminal", mic1lp_p_enum);
++//static const struct snd_kcontrol_new p_term_mic1lp =
++//	SOC_DAPM_ENUM("MIC1LP P-Terminal", mic1lp_p_enum);
+ 
+-static const struct snd_kcontrol_new p_term_mic1rp =
+-	SOC_DAPM_ENUM("MIC1RP P-Terminal", mic1rp_p_enum);
++//static const struct snd_kcontrol_new p_term_mic1rp =
++//	SOC_DAPM_ENUM("MIC1RP P-Terminal", mic1rp_p_enum);
+ 
+-static const struct snd_kcontrol_new p_term_mic1lm =
+-	SOC_DAPM_ENUM("MIC1LM P-Terminal", mic1lm_p_enum);
++//static const struct snd_kcontrol_new p_term_mic1lm =
++//	SOC_DAPM_ENUM("MIC1LM P-Terminal", mic1lm_p_enum);
+ 
+-static const struct snd_kcontrol_new m_term_mic1lm =
+-	SOC_DAPM_ENUM("MIC1LM M-Terminal", mic1lm_m_enum);
++//static const struct snd_kcontrol_new m_term_mic1lm =
++//	SOC_DAPM_ENUM("MIC1LM M-Terminal", mic1lm_m_enum);
+ 
+ static const struct snd_kcontrol_new aic31xx_dapm_hpl_switch =
+ 	SOC_DAPM_SINGLE("Switch", AIC31XX_LANALOGHPL, 7, 1, 0);
+@@ -532,24 +540,24 @@ static const struct snd_soc_dapm_widget aic31xx_dapm_widgets[] = {
+ 	SND_SOC_DAPM_INPUT("MIC1LM"),
+ 
+ 	/* Input Selection to MIC_PGA */
+-	SND_SOC_DAPM_MUX("MIC1LP P-Terminal", SND_SOC_NOPM, 0, 0,
+-			 &p_term_mic1lp),
+-	SND_SOC_DAPM_MUX("MIC1RP P-Terminal", SND_SOC_NOPM, 0, 0,
+-			 &p_term_mic1rp),
+-	SND_SOC_DAPM_MUX("MIC1LM P-Terminal", SND_SOC_NOPM, 0, 0,
+-			 &p_term_mic1lm),
++//	SND_SOC_DAPM_MUX("MIC1LP P-Terminal", SND_SOC_NOPM, 0, 0,
++//			 &p_term_mic1lp),
++//	SND_SOC_DAPM_MUX("MIC1RP P-Terminal", SND_SOC_NOPM, 0, 0,
++//			 &p_term_mic1rp),
++//	SND_SOC_DAPM_MUX("MIC1LM P-Terminal", SND_SOC_NOPM, 0, 0,
++//			 &p_term_mic1lm),
+ 
+ 	/* ADC */
+-	SND_SOC_DAPM_ADC_E("ADC", "Capture", AIC31XX_ADCSETUP, 7, 0,
+-			   aic31xx_dapm_power_event, SND_SOC_DAPM_POST_PMU |
+-			   SND_SOC_DAPM_POST_PMD),
++//	SND_SOC_DAPM_ADC_E("ADC", "Capture", AIC31XX_ADCSETUP, 7, 0,
++//			   aic31xx_dapm_power_event, SND_SOC_DAPM_POST_PMU |
++//			   SND_SOC_DAPM_POST_PMD),
+ 
+-	SND_SOC_DAPM_MUX("MIC1LM M-Terminal", SND_SOC_NOPM, 0, 0,
+-			 &m_term_mic1lm),
++//	SND_SOC_DAPM_MUX("MIC1LM M-Terminal", SND_SOC_NOPM, 0, 0,
++//			 &m_term_mic1lm),
+ 
+ 	/* Enabling & Disabling MIC Gain Ctl */
+-	SND_SOC_DAPM_PGA("MIC_GAIN_CTL", AIC31XX_MICPGA,
+-			 7, 1, NULL, 0),
++//	SND_SOC_DAPM_PGA("MIC_GAIN_CTL", AIC31XX_MICPGA,
++//			 7, 1, NULL, 0),
+ 
+ 	/* Output Mixers */
+ 	SND_SOC_DAPM_MIXER("Output Left", SND_SOC_NOPM, 0, 0,
+@@ -680,6 +688,15 @@ static int aic31xx_add_controls(struct snd_soc_codec *codec)
+ {
+ 	int ret = 0;
+ 	struct aic31xx_priv *aic31xx = snd_soc_codec_get_drvdata(codec);
++	#if 0
++	printk(KERN_INFO "%s.1\n", __func__);
++	ret = snd_soc_add_codec_controls(
++		codec, common31xx_snd_controls,
++		ARRAY_SIZE(common31xx_snd_controls));
++	printk(KERN_INFO "%s.2, return: %d\n", __func__, ret);
++	if (ret)
++		return ret;
++	#endif
+ 
+ 	if (!(aic31xx->pdata.codec_type & DAC31XX_BIT))
+ 		ret = snd_soc_add_codec_controls(
+@@ -708,6 +725,20 @@ static int aic31xx_add_widgets(struct snd_soc_codec *codec)
+ 	//struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
+ 	//struct aic31xx_priv *aic31xx = snd_soc_codec_get_drvdata(codec);
+ 	int ret = 0;
++	#if 0
++	printk(KERN_INFO "%s.1\n", __func__);
++	ret = snd_soc_dapm_new_controls(
++		dapm, common31xx_dapm_widgets,
++		ARRAY_SIZE(common31xx_dapm_widgets));
++	printk(KERN_INFO "%s.2, return: %d\n", __func__, ret);
++	if (ret)
++		return ret;
++
++	ret = snd_soc_dapm_add_routes(dapm, common31xx_audio_map,
++				      ARRAY_SIZE(common31xx_audio_map));
++	if (ret)
++		return ret;
++	#endif
+ 
+ 	if (aic31xx->pdata.codec_type & DAC31XX_BIT) {
+ 		ret = snd_soc_dapm_new_controls(
+@@ -830,12 +861,12 @@ static int aic31xx_setup_pll(struct snd_soc_codec *codec,
+ 	snd_soc_write(codec, AIC31XX_DOSRLSB, aic31xx_divs[i].dosr & 0xff);
+ 
+ 	/* ADC dividers configuration. Write reset value 1 if not used. */
+-	snd_soc_update_bits(codec, AIC31XX_NADC, AIC31XX_PLL_MASK,
+-			    aic31xx_divs[i].nadc ? aic31xx_divs[i].nadc : 1);
+-	snd_soc_update_bits(codec, AIC31XX_MADC, AIC31XX_PLL_MASK,
+-			    aic31xx_divs[i].madc ? aic31xx_divs[i].madc : 1);
++//	snd_soc_update_bits(codec, AIC31XX_NADC, AIC31XX_PLL_MASK,
++//			    aic31xx_divs[i].nadc ? aic31xx_divs[i].nadc : 1);
++//	snd_soc_update_bits(codec, AIC31XX_MADC, AIC31XX_PLL_MASK,
++//			    aic31xx_divs[i].madc ? aic31xx_divs[i].madc : 1);
+ 
+-	snd_soc_write(codec, AIC31XX_AOSR, aic31xx_divs[i].aosr);
++//	snd_soc_write(codec, AIC31XX_AOSR, aic31xx_divs[i].aosr);
+ 
+ 	/* Bit clock divider configuration. */
+ 	snd_soc_update_bits(codec, AIC31XX_BCLKN,
+@@ -859,7 +890,8 @@ static int aic31xx_hw_params(struct snd_pcm_substream *substream,
+ 			     struct snd_soc_dai *dai)
+ {
+ 	struct snd_soc_codec *codec = dai->codec;
+-	u8 data = 0;
++	//u8 data = 0;
++	u8 data = 0xC; //harris
+ 
+ 	dev_dbg(codec->dev, "## %s: width %d rate %d\n",
+ 		__func__, params_width(params),
+@@ -887,7 +919,7 @@ static int aic31xx_hw_params(struct snd_pcm_substream *substream,
+ 	}
+ 
+ 	snd_soc_update_bits(codec, AIC31XX_IFACE1,
+-			    AIC31XX_IFACE1_DATALEN_MASK,
++			    AIC31XX_IFACE1_DATALEN_MASK|AIC31XX_IFACE1_MASTER_MASK,
+ 			    data);
+ 
+ 	return aic31xx_setup_pll(codec, params);
+@@ -915,7 +947,9 @@ static int aic31xx_set_dai_fmt(struct snd_soc_dai *codec_dai,
+ 	struct snd_soc_codec *codec = codec_dai->codec;
+ 	u8 iface_reg1 = 0;
+ 	u8 iface_reg2 = 0;
++	//u8 iface_reg2 = 4; //harris
+ 	u8 dsp_a_val = 0;
++	int ret; u32 value;
+ 
+ 	dev_dbg(codec->dev, "## %s: fmt = 0x%x\n", __func__, fmt);
+ 
+@@ -962,16 +996,26 @@ static int aic31xx_set_dai_fmt(struct snd_soc_dai *codec_dai,
+ 		return -EINVAL;
+ 	}
+ 
++#if 0
+ 	snd_soc_update_bits(codec, AIC31XX_IFACE1,
+ 			    AIC31XX_IFACE1_DATATYPE_MASK |
+ 			    AIC31XX_IFACE1_MASTER_MASK,
+ 			    iface_reg1);
++#else
++	snd_soc_update_bits(codec, AIC31XX_IFACE1,
++			    AIC31XX_IFACE1_DATATYPE_MASK,
++			    iface_reg1);
++#endif
+ 	snd_soc_update_bits(codec, AIC31XX_DATA_OFFSET,
+ 			    AIC31XX_DATA_OFFSET_MASK,
+ 			    dsp_a_val);
++	//snd_soc_update_bits(codec, AIC31XX_IFACE2,
++	//		    AIC31XX_BCLKINV_MASK,
++	//		    iface_reg2);
+ 	snd_soc_update_bits(codec, AIC31XX_IFACE2,
+-			    AIC31XX_BCLKINV_MASK,
++			    0xFF,
+ 			    iface_reg2);
++	ret = regmap_read(codec->control_data, AIC31XX_IFACE1, &value);
+ 
+ 	return 0;
+ }
+@@ -1040,17 +1084,63 @@ static void aic31xx_clk_on(struct snd_soc_codec *codec)
+ 	u8 mask = AIC31XX_PM_MASK;
+ 	u8 on = AIC31XX_PM_MASK;
+ 
+-	dev_dbg(codec->dev, "codec clock -> on (rate %d)\n",
+-		aic31xx_divs[aic31xx->rate_div_line].rate);
++	//dev_dbg(codec->dev, "codec clock -> on (rate %d)\n",
++	//	aic31xx_divs[aic31xx->rate_div_line].rate);
+ 	snd_soc_update_bits(codec, AIC31XX_PLLPR, mask, on);
+ 	mdelay(10);
+ 	snd_soc_update_bits(codec, AIC31XX_NDAC, mask, on);
+ 	snd_soc_update_bits(codec, AIC31XX_MDAC, mask, on);
+ 	if (aic31xx_divs[aic31xx->rate_div_line].nadc)
+ 		snd_soc_update_bits(codec, AIC31XX_NADC, mask, on);
+-	if (aic31xx_divs[aic31xx->rate_div_line].madc)
+-		snd_soc_update_bits(codec, AIC31XX_MADC, mask, on);
++//	if (aic31xx_divs[aic31xx->rate_div_line].madc)
++//		snd_soc_update_bits(codec, AIC31XX_MADC, mask, on);
+ 	snd_soc_update_bits(codec, AIC31XX_BCLKN, mask, on);
++	//harris
++	snd_soc_write(codec, 0x33, 0x10);
++	snd_soc_write(codec, 0x19, 0x5);
++	snd_soc_write(codec, 0x1A, 0x81);
++#if 0
++	//PLL J 7
++	value = snd_soc_read(codec, 0x06);
++	printk(KERN_INFO "0x06 = 0x%x\n", value);
++	//PLL D 560
++	value = snd_soc_read(codec, 0x07);
++	printk(KERN_INFO "0x07 = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x08);
++	printk(KERN_INFO "0x08 = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x04);
++	printk(KERN_INFO "0x04 = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x05);
++	printk(KERN_INFO "0x05 = 0x%x\n", value);
++	//NDAC 3
++	value = snd_soc_read(codec, 0x0b);
++	printk(KERN_INFO "0x0b = 0x%x\n", value);
++	//MDAC 5
++	value = snd_soc_read(codec, 0x0c);
++	printk(KERN_INFO "0x0c = 0x%x\n", value);
++	//DOSR 128
++	value = snd_soc_read(codec, 0x0d);
++	printk(KERN_INFO "0x0d = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x0e);
++	printk(KERN_INFO "0x0e = 0x%x\n", value);
++	//BCLK WCLK output i2s 16bit
++	value = snd_soc_read(codec, 0x1b);
++	printk(KERN_INFO "0x1b = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x33);
++	printk(KERN_INFO "0x33 = 0x%x\n", value);
++	//wclk bclk
++	value = snd_soc_read(codec, 0x21);
++	printk(KERN_INFO "0x21 = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x19);
++	printk(KERN_INFO "0x19 = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x1a);
++	printk(KERN_INFO "0x1a = 0x%x\n", value);
++	// codec DAC_MOD_CLK
++	value = snd_soc_read(codec, 0x1d);
++	printk(KERN_INFO "0x1d = 0x%x\n", value);
++	value = snd_soc_read(codec, 0x1e);
++	printk(KERN_INFO "0x1e = 0x%x\n", value);
++#endif
+ }
+ 
+ static void aic31xx_clk_off(struct snd_soc_codec *codec)
+@@ -1060,7 +1150,7 @@ static void aic31xx_clk_off(struct snd_soc_codec *codec)
+ 
+ 	dev_dbg(codec->dev, "codec clock -> off\n");
+ 	snd_soc_update_bits(codec, AIC31XX_BCLKN, mask, off);
+-	snd_soc_update_bits(codec, AIC31XX_MADC, mask, off);
++//	snd_soc_update_bits(codec, AIC31XX_MADC, mask, off);
+ 	snd_soc_update_bits(codec, AIC31XX_NADC, mask, off);
+ 	snd_soc_update_bits(codec, AIC31XX_MDAC, mask, off);
+ 	snd_soc_update_bits(codec, AIC31XX_NDAC, mask, off);
+@@ -1109,18 +1199,17 @@ static int aic31xx_power_off(struct snd_soc_codec *codec)
+ static int aic31xx_set_bias_level(struct snd_soc_codec *codec,
+ 				  enum snd_soc_bias_level level)
+ {
+-	//dev_dbg(codec->dev, "## %s: %d -> %d\n", __func__,
+-	//	snd_soc_codec_get_bias_level(codec), level);
+ 
+ 	switch (level) {
+ 	case SND_SOC_BIAS_ON:
+ 		break;
+ 	case SND_SOC_BIAS_PREPARE:
+-		if (snd_soc_codec_get_bias_level(codec) == SND_SOC_BIAS_STANDBY)
++		if (codec->dapm.bias_level == SND_SOC_BIAS_STANDBY) {
+ 			aic31xx_clk_on(codec);
++		}
+ 		break;
+ 	case SND_SOC_BIAS_STANDBY:
+-		switch (snd_soc_codec_get_bias_level(codec)) {
++		switch (codec->dapm.bias_level) {
+ 		case SND_SOC_BIAS_OFF:
+ 			aic31xx_power_on(codec);
+ 			break;
+@@ -1132,11 +1221,11 @@ static int aic31xx_set_bias_level(struct snd_soc_codec *codec,
+ 		}
+ 		break;
+ 	case SND_SOC_BIAS_OFF:
+-		if (snd_soc_codec_get_bias_level(codec) == SND_SOC_BIAS_STANDBY)
++		if (codec->dapm.bias_level == SND_SOC_BIAS_STANDBY)
+ 			aic31xx_power_off(codec);
+ 		break;
+ 	}
+-
++	codec->dapm.bias_level = level;
+ 	return 0;
+ }
+ 
+@@ -1148,9 +1237,14 @@ static int aic31xx_codec_probe(struct snd_soc_codec *codec)
+ 
+ 	dev_dbg(aic31xx->dev, "## %s\n", __func__);
+ 
+-	aic31xx = snd_soc_codec_get_drvdata(codec);
+-
+ 	aic31xx->codec = codec;
++	/* setup i2c data ops */
++	codec->control_data = aic31xx->regmap;
++	ret = snd_soc_codec_set_cache_io(codec, 8, 8, SND_SOC_REGMAP);
++	if (ret < 0) {
++		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
++		return ret;
++	}
+ 
+ 	for (i = 0; i < ARRAY_SIZE(aic31xx->supplies); i++) {
+ 		aic31xx->disable_nb[i].nb.notifier_call =
+@@ -1165,6 +1259,35 @@ static int aic31xx_codec_probe(struct snd_soc_codec *codec)
+ 			return ret;
+ 		}
+ 	}
++#if 0
++	snd_soc_write(codec, 0x00, 0x00);
++	snd_soc_write(codec, 0x01, 0x01);
++	//PLL J 7
++	snd_soc_write(codec, 0x06, 0x07);
++	//PLL D 560
++	snd_soc_write(codec, 0x07, 0x02);
++	snd_soc_write(codec, 0x08, 0x30);
++	snd_soc_write(codec, 0x04, 0x03);
++	snd_soc_write(codec, 0x05, 0x91);
++	//NDAC 3
++	snd_soc_write(codec, 0x0b, 0x83);
++	//MDAC 5
++	snd_soc_write(codec, 0x0c, 0x85);
++	//DOSR 128
++	snd_soc_write(codec, 0x0d, 0x00);
++	snd_soc_write(codec, 0x0e, 0x40);
++	//BCLK WCLK output i2s 16bit
++	snd_soc_write(codec, 0x1b, 0x0c);
++	snd_soc_write(codec, 0x33, 0x10);
++	//wclk bclk
++	snd_soc_write(codec, 0x21, 0x00);
++	snd_soc_write(codec, 0x19, 0x05);
++	snd_soc_write(codec, 0x1a, 0x81);
++	// codec DAC_MOD_CLK
++	snd_soc_write(codec, 0x1d, 0x5);
++	snd_soc_write(codec, 0x1e, 0x81);
++	while(1);
++#endif
+ 
+ 	regcache_cache_only(aic31xx->regmap, true);
+ 	regcache_mark_dirty(aic31xx->regmap);
+@@ -1174,7 +1297,6 @@ static int aic31xx_codec_probe(struct snd_soc_codec *codec)
+ 		return ret;
+ 
+ 	ret = aic31xx_add_widgets(codec);
+-
+ 	return ret;
+ }
+ 
+@@ -1194,16 +1316,13 @@ static const struct snd_soc_codec_driver soc_codec_driver_aic31xx = {
+ 	.probe			= aic31xx_codec_probe,
+ 	.remove			= aic31xx_codec_remove,
+ 	.set_bias_level		= aic31xx_set_bias_level,
+-	.suspend_bias_off	= true,
+-
+-	.component_driver = {
+-		.controls		= common31xx_snd_controls,
+-		.num_controls		= ARRAY_SIZE(common31xx_snd_controls),
+-		.dapm_widgets		= common31xx_dapm_widgets,
+-		.num_dapm_widgets	= ARRAY_SIZE(common31xx_dapm_widgets),
+-		.dapm_routes		= common31xx_audio_map,
+-		.num_dapm_routes	= ARRAY_SIZE(common31xx_audio_map),
+-	},
++
++	.controls		= common31xx_snd_controls,
++	.num_controls		= ARRAY_SIZE(common31xx_snd_controls),
++	.dapm_widgets		= common31xx_dapm_widgets,
++	.num_dapm_widgets	= ARRAY_SIZE(common31xx_dapm_widgets),
++	.dapm_routes		= common31xx_audio_map,
++	.num_dapm_routes	= ARRAY_SIZE(common31xx_audio_map),
+ };
+ 
+ static const struct snd_soc_dai_ops aic31xx_dai_ops = {
+@@ -1285,8 +1404,9 @@ static void aic31xx_pdata_from_of(struct aic31xx_priv *aic31xx)
+ 	}
+ 
+ 	ret = of_get_named_gpio(np, "gpio-reset", 0);
+-	if (ret > 0)
++	if (ret > 0) {
+ 		aic31xx->pdata.gpio_reset = ret;
++	}
+ }
+ #else /* CONFIG_OF */
+ static void aic31xx_pdata_from_of(struct aic31xx_priv *aic31xx)
+@@ -1315,6 +1435,12 @@ static int aic31xx_device_init(struct aic31xx_priv *aic31xx)
+ 			dev_err(aic31xx->dev, "not able to acquire gpio\n");
+ 			return ret;
+ 		}
++#if 1
++		gpio_set_value(aic31xx->pdata.gpio_reset, 0);
++		msleep(100);
++		//reset
++		gpio_set_value(aic31xx->pdata.gpio_reset, 1);
++#endif
+ 	}
+ 
+ 	for (i = 0; i < ARRAY_SIZE(aic31xx->supplies); i++)
+@@ -1329,6 +1455,25 @@ static int aic31xx_device_init(struct aic31xx_priv *aic31xx)
+ 	return ret;
+ }
+ 
++static int aic31xx_fill_defaults(struct aic31xx_priv *aic31xx)
++{
++	int i, ret, val, index;
++
++	regmap_write(aic31xx->regmap, AIC31XX_RESET, 0x1);
++	msleep(10);
++	#if 1
++	for (i = 0; i < ARRAY_SIZE(aic31xx_reg_defaults); i++) {
++		val = aic31xx_reg_defaults[i].def;
++		index = aic31xx_reg_defaults[i].reg;
++		ret = regmap_write(aic31xx->regmap, index, val);
++		if (ret)
++			return ret;
++	}
++	#endif
++
++	return 0;
++}
++
+ static int aic31xx_i2c_probe(struct i2c_client *i2c,
+ 			     const struct i2c_device_id *id)
+ {
+@@ -1360,16 +1505,22 @@ static int aic31xx_i2c_probe(struct i2c_client *i2c,
+ 	if (ret)
+ 		return ret;
+ 
+-	if (aic31xx->pdata.codec_type & DAC31XX_BIT)
++	i2c_set_clientdata(i2c, aic31xx);
++	//harris
++	aic31xx_fill_defaults(aic31xx);
++
++	if (aic31xx->pdata.codec_type & DAC31XX_BIT) {
+ 		return snd_soc_register_codec(&i2c->dev,
+ 				&soc_codec_driver_aic31xx,
+ 				dac31xx_dai_driver,
+-				ARRAY_SIZE(dac31xx_dai_driver));
+-	else
++				1);
++	}
++	else {
+ 		return snd_soc_register_codec(&i2c->dev,
+ 				&soc_codec_driver_aic31xx,
+ 				aic31xx_dai_driver,
+-				ARRAY_SIZE(aic31xx_dai_driver));
++				1);
++	}
+ }
+ 
+ static int aic31xx_i2c_remove(struct i2c_client *i2c)
+@@ -1391,19 +1542,11 @@ static const struct i2c_device_id aic31xx_i2c_id[] = {
+ };
+ MODULE_DEVICE_TABLE(i2c, aic31xx_i2c_id);
+ 
+-#ifdef CONFIG_ACPI
+-static const struct acpi_device_id aic31xx_acpi_match[] = {
+-	{ "10TI3100", 0 },
+-	{ }
+-};
+-MODULE_DEVICE_TABLE(acpi, aic31xx_acpi_match);
+-#endif
+-
+ static struct i2c_driver aic31xx_i2c_driver = {
+ 	.driver = {
+ 		.name	= "tlv320aic31xx-codec",
++		.owner = THIS_MODULE,
+ 		.of_match_table = of_match_ptr(tlv320aic31xx_of_match),
+-		.acpi_match_table = ACPI_PTR(aic31xx_acpi_match),
+ 	},
+ 	.probe		= aic31xx_i2c_probe,
+ 	.remove		= aic31xx_i2c_remove,
+@@ -1412,6 +1555,7 @@ static struct i2c_driver aic31xx_i2c_driver = {
+ 
+ module_i2c_driver(aic31xx_i2c_driver);
+ 
++
+ MODULE_DESCRIPTION("ASoC TLV320AIC3111 codec driver");
+ MODULE_AUTHOR("Jyri Sarha");
+ MODULE_LICENSE("GPL");
+\ No newline at end of file
+diff --git a/sound/soc/codecs/tlv320aic31xx.h b/sound/soc/codecs/tlv320aic31xx.h
+index 612707e..5a3e23f 100755
+--- a/sound/soc/codecs/tlv320aic31xx.h
++++ b/sound/soc/codecs/tlv320aic31xx.h
+@@ -175,7 +175,7 @@ struct aic31xx_pdata {
+ /* Delta-Sigma Mono ADC Channel Fine-Gain Input Selection for P-Terminal */
+ #define AIC31XX_MICPGAPI	AIC31XX_REG(1, 48)
+ /* ADC Input Selection for M-Terminal */
+-#define AIC31XX_MICPGAMI	AIC31XX_REG(1, 49)
++//#define AIC31XX_MICPGAMI	AIC31XX_REG(1, 49)
+ /* Input CM Settings */
+ #define AIC31XX_MICPGACM	AIC31XX_REG(1, 50)
+ 
+diff --git a/sound/soc/fsl/Kconfig b/sound/soc/fsl/Kconfig
+index 573dabb..40888ed 100644
+--- a/sound/soc/fsl/Kconfig
++++ b/sound/soc/fsl/Kconfig
+@@ -284,6 +284,18 @@ config SND_SOC_IMX_SGTL5000
+ 	  Say Y if you want to add support for SoC audio on an i.MX board with
+ 	  a sgtl5000 codec.
+ 
++config SND_SOC_IMX_TLV320DAC3100
++	tristate "SoC Audio support for i.MX boards with tlv320dac310x"
++	depends on OF && I2C
++	select SND_SOC_TLV320AIC31X
++	select SND_SOC_IMX_PCM_DMA
++	select SND_SOC_IMX_AUDMUX
++	select SND_SOC_FSL_SAI
++	select SND_SOC_FSL_SSI
++	help
++	  Say Y if you want to add support for SoC audio on an i.MX board with
++	  a tlv320dac310x codec.
++
+ config SND_SOC_IMX_MQS
+ 	tristate "SoC Audio support for i.MX boards with MQS"
+ 	depends on OF
+diff --git a/sound/soc/fsl/Makefile b/sound/soc/fsl/Makefile
+index 144cd69..6e46328 100644
+--- a/sound/soc/fsl/Makefile
++++ b/sound/soc/fsl/Makefile
+@@ -55,6 +55,7 @@ snd-soc-mx27vis-aic32x4-objs := mx27vis-aic32x4.o
+ snd-soc-wm1133-ev1-objs := wm1133-ev1.o
+ snd-soc-imx-cs42888-objs := imx-cs42888.o
+ snd-soc-imx-sgtl5000-objs := imx-sgtl5000.o
++snd-soc-imx-tlv320dac3100-objs := imx-tlv320dac3100.o
+ snd-soc-imx-wm8962-objs := imx-wm8962.o
+ snd-soc-imx-spdif-objs := imx-spdif.o
+ snd-soc-imx-mc13783-objs := imx-mc13783.o
+@@ -68,6 +69,7 @@ obj-$(CONFIG_SND_SOC_MX27VIS_AIC32X4) += snd-soc-mx27vis-aic32x4.o
+ obj-$(CONFIG_SND_MXC_SOC_WM1133_EV1) += snd-soc-wm1133-ev1.o
+ obj-$(CONFIG_SND_SOC_IMX_CS42888) += snd-soc-imx-cs42888.o
+ obj-$(CONFIG_SND_SOC_IMX_SGTL5000) += snd-soc-imx-sgtl5000.o
++obj-$(CONFIG_SND_SOC_IMX_TLV320DAC3100) += snd-soc-imx-tlv320dac3100.o
+ obj-$(CONFIG_SND_SOC_IMX_WM8962) += snd-soc-imx-wm8962.o
+ obj-$(CONFIG_SND_SOC_IMX_SPDIF) += snd-soc-imx-spdif.o
+ obj-$(CONFIG_SND_SOC_IMX_MC13783) += snd-soc-imx-mc13783.o
+diff --git a/sound/soc/soc-core.c b/sound/soc/soc-core.c
+index c1d9d85..345f354 100644
+--- a/sound/soc/soc-core.c
++++ b/sound/soc/soc-core.c
+@@ -3817,6 +3817,7 @@ int snd_soc_register_card(struct snd_soc_card *card)
+ 		}
+ 	}
+ 
++	printk(KERN_INFO "111......card addr: 0x%x\n", card);
+ 	dev_set_drvdata(card->dev, card);
+ 
+ 	snd_soc_initialize_card_lists(card);
+diff --git a/sound/soc/soc-dapm.c b/sound/soc/soc-dapm.c
+index e4da224..8f2f7d3 100644
+--- a/sound/soc/soc-dapm.c
++++ b/sound/soc/soc-dapm.c
+@@ -1695,6 +1695,7 @@ static void dapm_post_sequence_async(void *data, async_cookie_t cookie)
+ 	struct snd_soc_dapm_context *d = data;
+ 	int ret;
+ 
++
+ 	/* If we just powered the last thing off drop to standby bias */
+ 	if (d->bias_level == SND_SOC_BIAS_PREPARE &&
+ 	    (d->target_bias_level == SND_SOC_BIAS_STANDBY ||
+-- 
+1.9.1
+
